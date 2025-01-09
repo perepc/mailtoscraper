@@ -1,0 +1,10 @@
+mailto-scraper/
+├── pyproject.toml
+├── README.md
+├── src/
+│   └── mailto_scraper/
+│       ├── __init__.py
+│       └── main.py
+└── tests/
+    ├── __init__.py
+    └── test_main.py 
