@@ -2,9 +2,12 @@ mailto-scraper/
 ├── pyproject.toml
 ├── README.md
 ├── src/
-│   └── mailto_scraper/
+│   ├── mailto_scraper/
+│   │   ├── __init__.py
+│   │   └── main.py
+│   └── shopify_searcher/
 │       ├── __init__.py
-│       └── main.py
+│       └── search.py
 └── tests/
     ├── __init__.py
     └── test_main.py 

@@ -1,6 +1,6 @@
 # Mailto Scraper
 
-A Python tool that extracts email addresses from a list of websites. It searches for emails both in the visible text and in mailto links, generating a comprehensive report of all found email addresses.
+A Python tool that extracts email addresses from a list of websites. It searches for emails both in the visible text and in mailto links, generating a comprehensive report of all found email addresses in CSV format.
 
 ## Features
 
@@ -12,6 +12,8 @@ A Python tool that extracts email addresses from a list of websites. It searches
 - Handles errors gracefully
 - Uses proper User-Agent headers to avoid blocking
 - Configurable output directory for results
+- Output in CSV format for better data handling
+- Can be used in conjunction with shopify_searcher to process Shopify stores
 - Advanced email validation:
   - Validates email format using email-validator library
   - Cleans and validates domain extensions
@@ -132,7 +134,7 @@ optional arguments:
 
 The script generates two files in the specified output directory (or current directory if not specified):
 
-- `found_emails_YYYYMMDD_HHMMSS.txt`: Contains all unique valid email addresses found
+- `found_emails_YYYYMMDD_HHMMSS.csv`: Contains all unique valid email addresses found in CSV format
 - `scraping_results_YYYYMMDD_HHMMSS.log`: Detailed log of the scraping process, including:
   - Processed URLs
   - Found and discarded emails
@@ -191,4 +193,37 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Author
 
-Pere Pasamonte - [perepc@gmail.com] 
+Pere Pasamonte - [perepc@gmail.com]
+
+## Using shopify_searcher
+
+The repository includes a complementary tool called `shopify_searcher` that helps you find Shopify stores with specific characteristics. Currently, it's configured to find stores that are likely using the judge.me review system.
+
+### Basic Usage
+
+To use shopify_searcher:
+
+```bash
+poetry run python -m shopify_searcher.main
+```
+
+The tool will:
+1. Search for Shopify stores with specific characteristics
+2. Generate a list of URLs in the data directory
+3. Create a detailed log of the search process in the data directory too
+
+Note: Currently, the tool doesn't accept command-line arguments, and paramenters have to be set in the code; those are the default values:
+
+- output_dir: 'data'
+- num_results: 100
+- region: 'es'
+- lang: 'es'
+- unique: True
+- sleep_interval: 5
+- save_results: True
+
+The generated URLs file can then be used as input for the mailto_scraper:
+
+```bash
+poetry run python -m mailto_scraper.main
+``` 

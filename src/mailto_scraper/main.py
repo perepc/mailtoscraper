@@ -9,6 +9,7 @@ from pathlib import Path
 import argparse
 from datetime import datetime
 from email_validator import validate_email, EmailNotValidError
+import csv
 
 def get_timestamp() -> str:
     """
@@ -22,7 +23,7 @@ def get_output_filenames(output_dir: Path) -> Tuple[Path, Path]:
     Returns a tuple of (emails_file, log_file)
     """
     timestamp = get_timestamp()
-    emails_file = output_dir / f"found_emails_{timestamp}.txt"
+    emails_file = output_dir / f"found_emails_{timestamp}.csv"
     log_file = output_dir / f"scraping_results_{timestamp}.log"
     return emails_file, log_file
 
@@ -294,29 +295,30 @@ def scrape_emails_from_url(url: str) -> Tuple[List[str], bool]:
         logging.error(f"Error processing {url}: {str(e)}")
         return [], False
 
-def process_urls(urls: List[str], log_file: Path) -> List[str]:
+def process_urls(urls: List[str], log_file: Path) -> List[Tuple[str, str]]:
     """
     Process a list of URLs and extract all found emails
+    Returns a list of tuples containing (url, email)
     """
     setup_logging(log_file)
-    all_emails = set()
-    
+    all_emails = []
+
     for url in urls:
         logging.info(f"\nProcessing URL: {url}")
         emails, found = scrape_emails_from_url(url)
         
         if found:
-            all_emails.update(emails)
-            logging.info(f"✓ Found {len(emails)} valid emails in {url}")
-            logging.info("Summary of valid emails found:")
             for email in emails:
+                all_emails.append((url, email))  # Guardar la URL junto con el email
+                logging.info(f"✓ Found {len(emails)} valid emails in {url}")
+                logging.info("Summary of valid emails found:")
                 logging.info(f"  ✓ {email}")
         else:
             logging.info(f"✗ No valid emails found in {url}")
         
         logging.info("-" * 80)  # Visual separator in log
     
-    return list(all_emails)
+    return all_emails
 
 def parse_arguments():
     """Parse command line arguments"""
@@ -354,15 +356,17 @@ def main():
     print(f"- Log will be saved to: {log_file.name}")
     print("Starting email extraction...")
     
-    emails = process_urls(urls, log_file)
+    all_emails = process_urls(urls, log_file)
     
-    # Save found emails to a file
-    with open(emails_file, 'w') as f:
-        for email in sorted(emails):
-            f.write(f"{email}\n")
+    # Guardar los emails encontrados en un archivo CSV
+    with open(emails_file, 'w', newline='') as f:
+        writer = csv.writer(f)
+        writer.writerow(['url', 'e-mail'])  # Escribir encabezados
+        for url, email in all_emails:
+            writer.writerow([url, email])  # Escribir cada fila con URL y email
     
     print(f"\nProcess completed:")
-    print(f"- {len(emails)} unique emails have been found")
+    print(f"- {len(all_emails)} unique emails have been found")
     print(f"- Results have been saved to '{emails_file}'")
     print(f"- Activity log is in '{log_file}'")
 
