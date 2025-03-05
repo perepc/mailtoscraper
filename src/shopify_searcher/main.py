@@ -106,11 +106,21 @@ def get_custom_domain_redirect(url_shopify: str) -> Tuple[Optional[str], str]:
     except Exception as e:
         return None, f"Error following redirects: {str(e)}"
 
+def normalize_url(url: str) -> str:
+    """Normaliza una URL para comparaciones consistentes"""
+    # Eliminar el protocolo (http:// o https://)
+    url = url.replace('http://', '').replace('https://', '')
+    # Eliminar www. si existe
+    url = url.replace('www.', '')
+    # Eliminar barra final si existe
+    url = url.rstrip('/')
+    return url.lower()
+
 def search_shopify_stores(
     output_dir: Path,
     num_results: int = 100,
-    region: str = 'es',
-    lang: str = 'es',
+    region: str = '',
+    lang: str = '',
     save_results: bool = True,
     exceptions_file: Optional[Path] = None,
     custom_search_engine_id: str = None
@@ -120,18 +130,19 @@ def search_shopify_stores(
     """
     logger = setup_logging(output_dir)
     stores = []
-    processed_domains = set()  # Set to track processed domains
+    processed_domains = set()
     
-    # Load exceptions and build query
+    # Cargar y normalizar excepciones
     exceptions = set()
-    query = 'site:myshopify.com "powered by Judge.me"'
-    
     if exceptions_file and exceptions_file.exists():
         with open(exceptions_file, 'r') as f:
-            exceptions = set(line.strip() for line in f)
-            # Add -site: operator for each exception
-            exclude_sites = ' '.join(f'-site:{domain}' for domain in exceptions)
-            query = f'{query} {exclude_sites}'
+            exceptions = {normalize_url(line.strip()) for line in f}
+    
+    query = 'site:myshopify.com "powered by Judge.me"'
+    if exceptions:
+        # Agregar -site: operator para cada excepción
+        exclude_sites = ' '.join(f'-site:{domain}' for domain in exceptions)
+        query = f'{query} {exclude_sites}'
     
     logger.info(f"Starting search with query: {query}")
     logger.info(f"Searching for up to {num_results} results")
@@ -162,10 +173,16 @@ def search_shopify_stores(
                 
             for item in result['items']:
                 url = item['link']
-                # Clean the URL to get only the domain
-                domain = url.split('/')[0] + '//' + url.split('/')[2]
+                # Normalizar la URL antes de procesar
+                normalized_url = normalize_url(url)
+                domain = normalized_url.split('/')[0]
                 
-                # Skip if we've already processed this domain
+                # Verificar si el dominio está en las excepciones
+                if domain in exceptions:
+                    logger.info(f"Skipping excluded domain: {domain}")
+                    continue
+                
+                # Verificar si ya procesamos este dominio
                 if domain in processed_domains:
                     logger.info(f"Skipping duplicate domain: {domain}")
                     continue
@@ -180,14 +197,14 @@ def search_shopify_stores(
                         continue
                     
                     if custom_domain:
-                        shopify_store = ShopifyStore(custom_domain=custom_domain, shopify_url=domain, region=region, lang=lang)
+                        shopify_store = ShopifyStore(custom_domain=custom_domain, shopify_domain=domain, region=region, lang=lang)
                         processed_domains.add(custom_domain)
                     else:
-                        shopify_store = ShopifyStore(custom_domain=domain, shopify_url=domain, region=region, lang=lang)
+                        shopify_store = ShopifyStore(custom_domain=domain, shopify_domain=domain, region=region, lang=lang)
                         processed_domains.add(domain)
                     
                     stores.append(shopify_store)
-                    logger.info(f"Store found: {shopify_store.custom_domain} - {shopify_store.shopify_url}")
+                    logger.info(f"Store found: {shopify_store.custom_domain} - {shopify_store.shopify_domain}")
                     
                     if len(stores) >= num_results:
                         break

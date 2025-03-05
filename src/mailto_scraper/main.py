@@ -304,7 +304,7 @@ def process_store(store: ShopifyStore, log_file: Path) -> ShopifyStore:
     setup_logging(log_file)
     
     logging.info(f"\nProcessing store: {store.custom_domain}")
-    emails, found = scrape_emails_from_url(store.custom_domain)
+    emails, found = scrape_emails_from_url("https://" + store.custom_domain)
     
     if found and emails:
         store.email = emails[0]  # Tomamos el primer email encontrado
