@@ -1,13 +1,29 @@
 mailto-scraper/
 ├── pyproject.toml
 ├── README.md
+├── LICENSE
 ├── src/
+│   ├── common/
+│   │   ├── __init__.py
+│   │   └── models/
+│   │       ├── __init__.py
+│   │       ├── company_info.py
+│   │       ├── domain_email.py
+│   │       ├── email_data.py
+│   │       └── shopify_store.py
 │   ├── mailto_scraper/
 │   │   ├── __init__.py
 │   │   └── main.py
-│   └── shopify_searcher/
+│   ├── shopify_searcher/
+│   │   ├── __init__.py
+│   │   ├── main.py
+│   │   └── README.md
+│   ├── email_writer/
+│   │   ├── __init__.py
+│   │   └── main.py
+│   └── email_sender/
 │       ├── __init__.py
-│       └── search.py
+│       └── main.py
 └── tests/
     ├── __init__.py
-    └── test_main.py 
+    └── test_main.py

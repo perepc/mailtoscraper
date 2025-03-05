@@ -54,3 +54,5 @@ htmlcov/
 found_emails.txt
 scraping_results.log 
 data/*
+client_secret.json
+token.pickle

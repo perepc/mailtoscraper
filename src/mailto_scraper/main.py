@@ -1,15 +1,16 @@
 import re
 import logging
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 import requests
 from bs4 import BeautifulSoup
-from urllib.parse import urljoin, urlparse, unquote
+from urllib.parse import unquote
 import sys
 from pathlib import Path
 import argparse
 from datetime import datetime
 from email_validator import validate_email, EmailNotValidError
-import csv
+import json
+from common.models.shopify_store import ShopifyStore
 
 def get_timestamp() -> str:
     """
@@ -23,7 +24,7 @@ def get_output_filenames(output_dir: Path) -> Tuple[Path, Path]:
     Returns a tuple of (emails_file, log_file)
     """
     timestamp = get_timestamp()
-    emails_file = output_dir / f"found_emails_{timestamp}.csv"
+    emails_file = output_dir / f"found_emails_{timestamp}.json"
     log_file = output_dir / f"scraping_results_{timestamp}.log"
     return emails_file, log_file
 
@@ -82,7 +83,7 @@ def extract_clean_email(text: str) -> str:
     Extract a clean email from text, removing any attached text
     Returns None if no valid email is found
     """
-    # Buscar el patrón de email básico
+    # Search for the basic email pattern
     email_pattern = r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
     match = re.search(email_pattern, text)
     if match:
@@ -103,7 +104,7 @@ def is_valid_domain_extension(domain: str) -> bool:
     }
     
     try:
-        # Obtener la extensión (último componente del dominio)
+        # Get the extension (last component of the domain)
         extension = domain.split('.')[-1].lower()
         return extension in valid_tlds
     except:
@@ -125,22 +126,22 @@ def clean_domain(email: str) -> str:
     Clean the domain part of an email by removing invalid characters from the end
     Returns the cleaned email or None if no valid domain is found
     """
-    # Separar el email en usuario y dominio
+    # Separate the email into username and domain
     try:
         username, domain = email.split('@')
     except ValueError:
         return None
     
-    # Si no hay punto en el dominio, no es válido
+    # If there's no dot in the domain, it's invalid
     if '.' not in domain:
         return None
     
-    # Ir quitando caracteres del final del dominio hasta encontrar uno válido
+    # Remove characters from the end of the domain until a valid one is found
     original_domain = domain
     while domain:
-        # Verificar si el dominio actual tiene un formato válido
+        # Check if the current domain has a valid format
         if re.match(r'^[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$', domain):
-            # Verificar si la extensión del dominio es válida
+            # Check if the domain extension is valid
             if is_valid_domain_extension(domain):
                 if domain != original_domain:
                     logging.info(f"    ℹ Domain cleaned: {original_domain} -> {domain}")
@@ -148,9 +149,9 @@ def clean_domain(email: str) -> str:
             else:
                 logging.info(f"    ℹ Invalid domain extension: {domain}")
         
-        # Quitar un carácter del final
+        # Remove one character from the end
         domain = domain[:-1]
-        # Si después de quitar un carácter no hay punto, el dominio no es válido
+        # If after removing one character there's no dot, the domain is invalid
         if '.' not in domain:
             return None
     
@@ -182,7 +183,7 @@ def is_email_contained_in_another(email: str, email_list: List[str]) -> bool:
     email_clean = email.lower()
     for other in email_list:
         other_clean = other.lower()
-        # Si el otro email es más corto y está contenido en este email
+        # If the other email is shorter and is contained in this email
         if len(other_clean) < len(email_clean) and other_clean in email_clean:
             logging.info(f"    ✗ Discarded (contains {other}): {email}")
             return True
@@ -193,13 +194,13 @@ def extract_emails_from_text(text: str) -> List[str]:
     Extract email addresses from text using regular expressions
     Only returns valid email addresses
     """
-    # Primero, encontrar todos los posibles emails con contexto
+    # First, find all possible emails with context
     email_pattern = r'([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z0-9._%+-]+)'
     potential_matches = re.finditer(email_pattern, text)
     
-    # Primera pasada: recolectar todos los emails válidos
+    # First pass: collect all valid emails
     valid_emails = []
-    seen_emails = set()  # Para evitar duplicados en el logging
+    seen_emails = set()  # To avoid duplicates in logging
     
     for match in potential_matches:
         email = clean_email(match.group(1))
@@ -220,9 +221,9 @@ def extract_emails_from_text(text: str) -> List[str]:
             else:
                 logging.info(f"    ✗ Discarded (invalid format): {email}")
     
-    # Segunda pasada: filtrar emails que contienen a otros
+    # Second pass: filter emails that contain others
     filtered_emails = []
-    # Procesar primero los emails más largos para ver si contienen a otros
+    # Process the longest emails first to see if they contain others
     for email in sorted(valid_emails, key=len, reverse=True):
         if not is_email_contained_in_another(email, valid_emails):
             logging.info(f"    ✓ Accepted: {email}")
@@ -279,12 +280,12 @@ def scrape_emails_from_url(url: str) -> Tuple[List[str], bool]:
                 else:
                     logging.info(f"    ✗ Discarded from mailto (invalid format): {email}")
         
-        # Añadir emails de mailto
+        # Add mailto emails
         emails.extend(mailto_emails)
         
         # Clean and deduplicate emails
         unique_emails = []
-        # Procesar primero los emails más largos
+        # Process the longest emails first
         for email in sorted(set(emails), key=len, reverse=True):
             if not is_email_contained_in_another(email, emails):
                 unique_emails.append(email)
@@ -295,35 +296,29 @@ def scrape_emails_from_url(url: str) -> Tuple[List[str], bool]:
         logging.error(f"Error processing {url}: {str(e)}")
         return [], False
 
-def process_urls(urls: List[str], log_file: Path) -> List[Tuple[str, str]]:
+def process_store(store: ShopifyStore, log_file: Path) -> ShopifyStore:
     """
-    Process a list of URLs and extract all found emails
-    Returns a list of tuples containing (url, email)
+    Process a single ShopifyStore and extract email
+    Returns updated ShopifyStore with email field populated if found
     """
     setup_logging(log_file)
-    all_emails = []
-
-    for url in urls:
-        logging.info(f"\nProcessing URL: {url}")
-        emails, found = scrape_emails_from_url(url)
-        
-        if found:
-            for email in emails:
-                all_emails.append((url, email))  # Guardar la URL junto con el email
-                logging.info(f"✓ Found {len(emails)} valid emails in {url}")
-                logging.info("Summary of valid emails found:")
-                logging.info(f"  ✓ {email}")
-        else:
-            logging.info(f"✗ No valid emails found in {url}")
-        
-        logging.info("-" * 80)  # Visual separator in log
     
-    return all_emails
+    logging.info(f"\nProcessing store: {store.custom_domain}")
+    emails, found = scrape_emails_from_url(store.custom_domain)
+    
+    if found and emails:
+        store.email = emails[0]  # Tomamos el primer email encontrado
+        logging.info(f"✓ Found email: {store.email}")
+    else:
+        logging.info(f"✗ No valid email found for {store.custom_domain}")
+    
+    logging.info("-" * 80)
+    return store
 
 def parse_arguments():
     """Parse command line arguments"""
-    parser = argparse.ArgumentParser(description='Extract email addresses from a list of websites.')
-    parser.add_argument('urls_file', help='Text file containing URLs to process (one per line)')
+    parser = argparse.ArgumentParser(description='Extract email addresses from Shopify stores.')
+    parser.add_argument('--input_file', help='JSON file containing ShopifyStore objects', type=Path, required=True)
     parser.add_argument('-o', '--output-dir', 
                        help='Directory where output files will be saved (default: current directory)',
                        default='.')
@@ -340,34 +335,40 @@ def main():
     output_dir.mkdir(parents=True, exist_ok=True)
     
     # Generate timestamped filenames
-    emails_file, log_file = get_output_filenames(output_dir)
+    output_file, log_file = get_output_filenames(output_dir)
     
-    print(f"Reading URLs from: {args.urls_file}")
+    print(f"Reading stores from: {args.input_file}")
     
-    # Read URLs from file
-    urls = read_urls_from_file(args.urls_file)
-    if not urls:
-        print("No URLs found in the input file")
+    # Read stores from JSON file
+    try:
+        with open(args.input_file, 'r') as f:
+            stores_data = json.load(f)
+            stores = [ShopifyStore(**store) for store in stores_data]
+    except Exception as e:
+        print(f"Error reading input file: {str(e)}")
         sys.exit(1)
     
-    print(f"Found {len(urls)} URLs to process")
+    if not stores:
+        print("No stores found in the input file")
+        sys.exit(1)
+    
+    print(f"Found {len(stores)} stores to process")
     print(f"Output files will be saved in: {output_dir.absolute()}")
-    print(f"- Emails will be saved to: {emails_file.name}")
+    print(f"- Results will be saved to: {output_file.name}")
     print(f"- Log will be saved to: {log_file.name}")
     print("Starting email extraction...")
     
-    all_emails = process_urls(urls, log_file)
+    # Process each store
+    processed_stores = [process_store(store, log_file) for store in stores]
     
-    # Guardar los emails encontrados en un archivo CSV
-    with open(emails_file, 'w', newline='') as f:
-        writer = csv.writer(f)
-        writer.writerow(['url', 'e-mail'])  # Escribir encabezados
-        for url, email in all_emails:
-            writer.writerow([url, email])  # Escribir cada fila con URL y email
+    # Save the processed stores to JSON file
+    with open(output_file, 'w') as f:
+        json.dump([store.model_dump() for store in processed_stores if store.email], f, indent=4)
     
+    emails_found = sum(1 for store in processed_stores if store.email)
     print(f"\nProcess completed:")
-    print(f"- {len(all_emails)} unique emails have been found")
-    print(f"- Results have been saved to '{emails_file}'")
+    print(f"- Found emails for {emails_found} out of {len(stores)} stores")
+    print(f"- Results have been saved to '{output_file}'")
     print(f"- Activity log is in '{log_file}'")
 
 if __name__ == "__main__":

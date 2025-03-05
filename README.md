@@ -1,32 +1,62 @@
 # Mailto Scraper
 
-A Python tool that extracts email addresses from a list of websites. It searches for emails both in the visible text and in mailto links, generating a comprehensive report of all found email addresses in CSV format.
+A comprehensive Python toolkit for email marketing automation. It includes tools for finding email addresses from websites, generating personalized email content, and sending emails. The toolkit consists of several specialized modules:
+
+## Core Modules
+
+### 1. Mailto Scraper
+- Extracts email addresses from multiple websites
+- Searches in both visible text and mailto links
+- Advanced email validation and cleaning
+- Generates detailed logs of the scraping process
+- Handles errors gracefully
+- Uses proper User-Agent headers
+- Configurable output directory
+- Output in JSON format for better data handling
+
+### 2. Email Writer
+- Generates personalized email content using AI
+- Analyzes company websites to understand their business
+- Creates tailored email subjects and bodies
+- Uses Perplexity AI for content generation
+- Supports HTML formatting in email bodies
+- Includes customizable email templates
+- Handles multiple email generation in batch
+- Generates detailed logs of content generation
+
+### 3. Email Sender
+- Sends emails using the Resend API
+- Supports HTML email content
+- Handles batch email sending
+- Provides detailed sending logs
+- Tracks successful and failed sends
+- Includes retry mechanisms
+- Configurable sending parameters
+
+### 4. Shopify Searcher
+- Finds Shopify stores using specific criteria
+- Supports searching by region and language
+- Detects stores using Judge.me reviews
+- Handles store redirects and personal domains
+- Includes retry mechanisms with exponential backoff
+- Generates detailed search logs
+- Configurable search parameters
+- Can exclude specific URLs
 
 ## Features
 
-- Extracts emails from multiple websites
-- Reads URLs from a text file
-- Searches in both visible text and mailto links
-- Removes duplicate email addresses
-- Generates detailed logs of the scraping process
-- Handles errors gracefully
-- Uses proper User-Agent headers to avoid blocking
-- Configurable output directory for results
-- Output in CSV format for better data handling
-- Can be used in conjunction with shopify_searcher to process Shopify stores
-- Advanced email validation:
-  - Validates email format using email-validator library
-  - Cleans and validates domain extensions
-  - Removes invalid characters from domains
-  - Detects and removes duplicate variations of the same email
+- Complete email marketing automation pipeline
+- Advanced email validation and cleaning
+- AI-powered content generation
+- Detailed logging for all operations
+- Error handling and retry mechanisms
+- Configurable output formats and directories
+- Support for batch operations
+- Region and language-specific searching
 
 ## Installation
 
-### Setting up a Virtual Environment
-
-You have two options to set up your development environment:
-
-#### Option 1: Using Poetry (Recommended)
+### Setting up a Virtual Environment Using Poetry
 
 1. Install Poetry if you haven't already:
 ```bash
@@ -49,135 +79,96 @@ poetry install
 poetry shell
 ```
 
-#### Option 2: Using venv (Python's built-in virtual environment)
-
-1. Clone the repository:
-```bash
-git clone https://github.com/yourusername/mailto-scraper.git
-cd mailto-scraper
-```
-
-2. Create a virtual environment:
-```bash
-python -m venv .venv
-```
-
-3. Activate the virtual environment:
-- On Linux/macOS:
-  ```bash
-  source .venv/bin/activate
-  ```
-- On Windows:
-  ```bash
-  .venv\Scripts\activate
-  ```
-
-4. Install dependencies:
-```bash
-pip install -r requirements.txt
-```
-
 ### Verifying Installation
 
 To verify that everything is set up correctly:
 ```bash
-python -c "import requests, bs4, email_validator; print('Setup successful!')"
+python -c "import requests, bs4, email_validator, langchain; print('Setup successful!')"
+```
+
+### Configuring environment variables
+
+Create a `.env` file in the root of the project with the following variables:
+```
+PERPLEXITY_API_KEY=your_perplexity_api_key
+PERPLEXITY_API_URL=https://api.perplexity.ai/chat/completions
+PERPLEXITY_MODEL=sonar
+RESEND_API_KEY=your_resend_api_key
+RESEND_API_URL=https://api.resend.com/emails
+MAIL_FROM=your_sender_email
 ```
 
 ## Usage
 
-1. Create a text file (e.g., `data/urls.txt`) with your target websites, one URL per line:
-```text
-https://example1.com
-https://example2.com
-# This is a comment and will be ignored
-https://example3.com
+### 1. Finding Shopify Stores
+
+For my particular use case, I have a list of Shopify stores that I want to find email addresses for. I have created a script that scrapes the Shopify stores and saves the results in a json file.
+
+As it uses Google Custom Search API, you need to create a custom search engine and get json credentials from Google Cloud Console. Follow the instructions in the [shopify_searcher README](src/shopify_searcher/README.md).
+
+1. Search for Shopify stores:
+```bash
+poetry run python -m shopify_searcher.main --region es --lang es --output_dir data
+```
+
+### 2. Finding Email Addresses
+
+1. Create a json file (e.g., `data/shopify_stores_20250304_083013.json`) with your target websites (this is the output of the shopify searcher or you can use your own list just filling the custom_domain attribute):
+```json
+[
+    {
+        "custom_domain": "https://example1.com",
+        "shopify_url": "",
+        "email": "",
+        "region": "",
+        "lang": ""
+    }
+]
 ```
 
 2. Run the scraper:
-- Basic usage (output files will be created in the current directory):
-  ```bash
-  poetry run python -m mailto_scraper.main urls.txt
-  ```
-
-- Using a relative path for output directory:
-  ```bash
-  poetry run python -m mailto_scraper.main data/urls.txt -o data/results
-  ```
-
-- Using an absolute path for output directory:
-  ```bash
-  poetry run python -m mailto_scraper.main data/urls.txt -o /home/user/scraping/results
-  ```
-
-- Get help on available options:
-  ```bash
-  poetry run python -m mailto_scraper.main --help
-  ```
-
-### Command Line Options
-
-```
-usage: python -m mailto_scraper.main [-h] [-o OUTPUT_DIR] urls_file
-
-Extract email addresses from a list of websites.
-
-positional arguments:
-  urls_file             Text file containing URLs to process (one per line)
-
-optional arguments:
-  -h, --help           show this help message and exit
-  -o, --output-dir     Directory where output files will be saved (default: current directory)
+```bash
+poetry run python -m mailto_scraper.main --input_file data/shopify_stores_20250304_083013.json --output_dir data
 ```
 
-### Output Files
+### 3. Generating Email Content
 
-The script generates two files in the specified output directory (or current directory if not specified):
+1. Use the email writer to generate personalized content:
+```bash
+poetry run python -m email_writer.main --json_file data/emails.json --output_dir data/content --my_company_url https://mycompany.com
+```
 
-- `found_emails_YYYYMMDD_HHMMSS.csv`: Contains all unique valid email addresses found in CSV format
-- `scraping_results_YYYYMMDD_HHMMSS.log`: Detailed log of the scraping process, including:
-  - Processed URLs
-  - Found and discarded emails
-  - Domain cleaning operations
-  - Validation results
-  - Success/failure for each URL
+### 4. Sending Emails
 
-### Email Validation Process
+1. Send the generated emails:
+```bash
+poetry run python -m email_sender.main --json_file data/content/emails.json --output_dir data/sent
+```
 
-The tool performs several validation steps:
-1. Extracts potential email addresses using regex
-2. Cleans and normalizes the email format
-3. Validates the domain structure and extension
-4. Performs RFC compliance check using email-validator
-5. Removes duplicate variations of the same email
-6. Cleans invalid characters from domain parts
+## Environment Variables
 
-### Input File Format
-
-- One URL per line
-- Empty lines are ignored
-- Lines starting with # are treated as comments and ignored
-- URLs should include the protocol (http:// or https://)
+Create a `.env` file with the following variables:
+```
+PERPLEXITY_API_KEY=your_perplexity_api_key
+PERPLEXITY_API_URL=https://api.perplexity.ai/chat/completions
+PERPLEXITY_MODEL=sonar
+RESEND_API_KEY=your_resend_api_key
+RESEND_API_URL=https://api.resend.com/emails
+MAIL_FROM=your_sender_email
+```
 
 ## Requirements
 
 - Python 3.8 or higher
-- Dependencies (automatically installed by Poetry or pip):
+- Dependencies (automatically installed by Poetry:
   - requests
   - beautifulsoup4
   - email-validator
+  - langchain
+  - python-dotenv
+  - pydantic
+  - google-search-results
   - pytest (for development)
-
-## Development
-
-To run tests:
-```bash
-# With Poetry
-poetry run pytest
-
-# With venv
-pytest
-```
 
 ## License
 
@@ -193,37 +184,4 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 ## Author
 
-Pere Pasamonte - [perepc@gmail.com]
-
-## Using shopify_searcher
-
-The repository includes a complementary tool called `shopify_searcher` that helps you find Shopify stores with specific characteristics. Currently, it's configured to find stores that are likely using the judge.me review system.
-
-### Basic Usage
-
-To use shopify_searcher:
-
-```bash
-poetry run python -m shopify_searcher.main
-```
-
-The tool will:
-1. Search for Shopify stores with specific characteristics
-2. Generate a list of URLs in the data directory
-3. Create a detailed log of the search process in the data directory too
-
-Note: Currently, the tool doesn't accept command-line arguments, and paramenters have to be set in the code; those are the default values:
-
-- output_dir: 'data'
-- num_results: 100
-- region: 'es'
-- lang: 'es'
-- unique: True
-- sleep_interval: 5
-- save_results: True
-
-The generated URLs file can then be used as input for the mailto_scraper:
-
-```bash
-poetry run python -m mailto_scraper.main
-``` 
+Pere Pasamonte - [perepc@gmail.com] 
